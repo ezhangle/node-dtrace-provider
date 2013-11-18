@@ -120,7 +120,7 @@ becomes visible to DTrace.
 
 The probes are then fired.
 
-## GENERAL INFORMATION: 
+## GENERAL INFORMATION
 
 Available on all supported platforms argument types are "int", for integer 
 numeric values, "char *" for strings, and "json" for objects rendered into 
@@ -128,7 +128,7 @@ JSON strings. Arguments typed as "json" will be created as "char *" probes in
 the provider, but objects passed to these probe arguments will be automatically 
 serialized to JSON before being passed forward to the system API.
 
-## DTRACE INFORMATION:
+## DTRACE INFORMATION
 
 Firing the probes from the example above produces this output:
 
@@ -198,8 +198,9 @@ correctly. The manifest is generated right before the termination of
 the node process.
 
 Some of these tools:
-PerfView - http://www.microsoft.com/en-us/download/details.aspx?id=28567
-LinqPad with Tx - http://tx.codeplex.com
+
+     PerfView - http://www.microsoft.com/en-us/download/details.aspx?id=28567
+     LinqPad with Tx - http://tx.codeplex.com
 
 **Windows-only features**
 
