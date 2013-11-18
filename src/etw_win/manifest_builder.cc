@@ -80,17 +80,17 @@ void ManifestBuilder::CreateManifest() {
 
     //Add the provider attributes.
     if(provider.m_name.empty()) {
-      provider_node->AddProperty("name", "Node-ETWProvider-" + std::to_string(provider_number));
+      provider_node->SetAttribute("name", "Node-ETWProvider-" + std::to_string(provider_number));
     } else {
-      provider_node->AddProperty("name", provider.m_name);
+      provider_node->SetAttribute("name", provider.m_name);
     }
 
-    provider_node->AddProperty("guid", std::string("{" + guid + "}"));
-    provider_node->AddProperty("symbol", "ProviderGuid");
-    provider_node->AddProperty("resourceFileName", "");
-    provider_node->AddProperty("messageFileName", "");
+    provider_node->SetAttribute("guid", std::string("{" + guid + "}"));
+    provider_node->SetAttribute("symbol", "ProviderGuid");
+    provider_node->SetAttribute("resourceFileName", "");
+    provider_node->SetAttribute("messageFileName", "");
 
-    //Create <templates> inside <provider> 
+    //Create child nodes inside <provider> 
     XmlNode* templates_node = provider_node->AddNewNode("templates");
     XmlNode* events_node = provider_node->AddNewNode("events");
     XmlNode* keywords_node = provider_node->AddNewNode("keywords");
@@ -102,13 +102,13 @@ void ManifestBuilder::CreateManifest() {
       //Create <template> for each probe, make the tid attribute equal to the name of the probe.    
       XmlNode* template_node = templates_node->AddNewNode("template");
       std::string tid = probe.m_name + "_tid";
-      template_node->AddProperty("tid", tid);
+      template_node->SetAttribute("tid", tid);
       int argument_index = 1;
       //Go through each argument data type the probe has...
       probe.m_type_info.DoForEach([&](EventPayloadType payload_type) {
-        //And create the according <data> element in the <template> element of the probe.
+        //And create the according <data> element for each argument type in the <template> element of the probe.
         XmlNode* data_node = template_node->AddNewNode("data");
-        data_node->AddProperty("name", "Argument" + std::to_string(argument_index++));
+        data_node->SetAttribute("name", "Argument" + std::to_string(argument_index++));
 
         const char* string_type = nullptr;
         //Based on the argument data type, set according attribute value in the <data> element.
@@ -127,51 +127,56 @@ void ManifestBuilder::CreateManifest() {
         }
 
         if(string_type)
-          data_node->AddProperty("inType", string_type);
+          data_node->SetAttribute("inType", string_type);
       });
 
       std::string string_id = std::to_string(probe.m_id);
 
+      //Add <event> inside <events> and fill it with values.
       XmlNode* event_node = events_node->AddNewNode("event");
-      event_node->AddProperty("value", string_id);
-      event_node->AddProperty("version", "0");
-      event_node->AddProperty("template", tid);
-      event_node->AddProperty("opcode", "opcode_probe_" + string_id);
-      event_node->AddProperty("level", "win:Informational");
-      event_node->AddProperty("task", probe.m_name);
-      event_node->AddProperty("keywords", "probe_keyword");
-      event_node->AddProperty("message", "$(string.event_message)");
+      event_node->SetAttribute("value", string_id);
+      event_node->SetAttribute("version", "0");
+      event_node->SetAttribute("template", tid);
+      event_node->SetAttribute("opcode", "opcode_probe_" + string_id);
+      event_node->SetAttribute("level", "win:Informational");
+      event_node->SetAttribute("task", probe.m_name);
+      event_node->SetAttribute("keywords", "probe_keyword");
+      event_node->SetAttribute("message", "$(string.event_message)");
 
+      //Add <task> node inside <tasks>.
       XmlNode* task_node = tasks_node->AddNewNode("task");
-      task_node->AddProperty("value", string_id);
-      task_node->AddProperty("name", probe.m_name);
-      task_node->AddProperty("message", "$(string.probe_" + string_id + "_task_message)");
+      task_node->SetAttribute("value", string_id);
+      task_node->SetAttribute("name", probe.m_name);
+      task_node->SetAttribute("message", "$(string.probe_" + string_id + "_task_message)");
 
+      //Attach <opcode>.
       XmlNode* opcode_node = opcodes_node->AddNewNode("opcode");
-      opcode_node->AddProperty("value", string_id);
-      opcode_node->AddProperty("name", "opcode_probe_" + string_id);
-      opcode_node->AddProperty("message", "$(string.probe_" + string_id + "_opcode_message)");
+      opcode_node->SetAttribute("value", string_id);
+      opcode_node->SetAttribute("name", "opcode_probe_" + string_id);
+      opcode_node->SetAttribute("message", "$(string.probe_" + string_id + "_opcode_message)");
     }
 
-    //Fill <keywords>
+    //Fill <keywords>.
     XmlNode* keyword_node = keywords_node->AddNewNode("keyword");
-    keyword_node->AddProperty("name", "probe_keyword");
-    keyword_node->AddProperty("mask", "0x2");
-    keyword_node->AddProperty("message", "$(string.probe_keyword_message)");
+    keyword_node->SetAttribute("name", "probe_keyword");
+    keyword_node->SetAttribute("mask", "0x2");
+    keyword_node->SetAttribute("message", "$(string.probe_keyword_message)");
 
+    //Create <localization> inside <instrumentationManifest> and <resources> inside <localization> to store strings.
     XmlNode* resources_node = provider_manifest.GetRootNode()->AddNewNode("localization")->AddNewNode("resources");
-    resources_node->AddProperty("culture", "en-US");
+    resources_node->SetAttribute("culture", "en-US");
     XmlNode* string_table_node = resources_node->AddNewNode("stringTable");
-
+    //Add opcode messages for tasks and opcodes.
     for(auto probe : provider.m_associated_probes) {
       std::string string_id = std::to_string(probe.m_id);
       string_table_node->AddString("probe_" + string_id + "_opcode_message", probe.m_name);
       string_table_node->AddString("probe_" + string_id + "_task_message", probe.m_name);
     }
-
+    //Add event and keyword messages. 
     string_table_node->AddString("event_message", "Node.js probe");
     string_table_node->AddString("probe_keyword_message", "Node.js probe");
 
+    //Finally, write the file.
     provider_manifest.Generate();
     provider_number++;
   }

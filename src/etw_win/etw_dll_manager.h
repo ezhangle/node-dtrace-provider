@@ -15,7 +15,9 @@ NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVE
 #pragma once
 #include <evntprov.h>
 #define MAKE_ERROR_MESSAGE(error_msg) "Failed to write ETW event: "##error_msg
-
+/*
+ * Handles all interactions with WinAPI.
+ */
 class EtwDllManager
 {
   typedef ULONG (NTAPI *EventRegisterFunc)(LPCGUID ProviderId, PENABLECALLBACK EnableCallback, PVOID CallbackContext, PREGHANDLE RegHandle);
@@ -30,7 +32,7 @@ class EtwDllManager
   EventUnregisterFunc m_event_unregister_ptr;
   EventWriteFunc m_event_write_ptr;
 
-  // This callback is called by ETW when consumers of our provider are enabled or disabled.
+  // This callback is called by ETW when the consumers of our provider are enabled or disabled.
   // The callback is dispatched on the ETW thread.
   static void NTAPI EtwEnableCallback(
     LPCGUID SourceId,

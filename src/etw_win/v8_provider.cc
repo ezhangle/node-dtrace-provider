@@ -110,7 +110,7 @@ Handle<Value> V8Provider::New(const V8Arguments& args) {
     throw eError("Provider with this GUID had already been created");
   }
 
-  RealProvider* provider = new RealProvider(provider_guid, provider_name);
+  RealProvider* provider = new RealProvider(provider_guid);
 
   //And expose it to JavaScript.
   provider->Wrap(args.This());
@@ -119,7 +119,6 @@ Handle<Value> V8Provider::New(const V8Arguments& args) {
 
 Handle<Value> V8Provider::AddProbe(const V8Arguments& args) {
   HandleScope scope;
-  Local<Array> desc;
   EVENT_DESCRIPTOR descriptor;
 
   bool is_descriptor_passed = false;
@@ -137,19 +136,19 @@ Handle<Value> V8Provider::AddProbe(const V8Arguments& args) {
       throw eError("Argument 2 must be descriptor array or string");
     }
   } else {
-    desc = Local<Array>::Cast(args[1]);
-    if (desc->Length() != DESCRIPTOR_ARRAY_SIZE) {
+    Local<Array> descriptor_array = Local<Array>::Cast(args[1]);
+    if (descriptor_array->Length() != DESCRIPTOR_ARRAY_SIZE) {
       throw eError("Event descriptor argument must be array of 7 int");
     }
 
     //TODO: Add check for integer type in the array.
-    descriptor.Id = desc->Get(0)->ToInt32()->Value();
-    descriptor.Version = desc->Get(1)->ToInt32()->Value();
-    descriptor.Channel = desc->Get(2)->ToInt32()->Value();
-    descriptor.Level = desc->Get(3)->ToInt32()->Value();
-    descriptor.Opcode = desc->Get(4)->ToInt32()->Value();
-    descriptor.Task = desc->Get(5)->ToInt32()->Value();
-    descriptor.Keyword = desc->Get(6)->ToInteger()->Value();
+    descriptor.Id = descriptor_array->Get(0)->ToInt32()->Value();
+    descriptor.Version = descriptor_array->Get(1)->ToInt32()->Value();
+    descriptor.Channel = descriptor_array->Get(2)->ToInt32()->Value();
+    descriptor.Level = descriptor_array->Get(3)->ToInt32()->Value();
+    descriptor.Opcode = descriptor_array->Get(4)->ToInt32()->Value();
+    descriptor.Task = descriptor_array->Get(5)->ToInt32()->Value();
+    descriptor.Keyword = descriptor_array->Get(6)->ToInteger()->Value();
 
     is_descriptor_passed = true;
   }
@@ -161,25 +160,28 @@ Handle<Value> V8Provider::AddProbe(const V8Arguments& args) {
     utility_arguments_number = 1;
   }
 
-  // get data types to make template info
-  int numtypes = args.Length() - utility_arguments_number;
+  //Get the actual number of types passed minus 1 for the probe name and 1 for the descriptor (if exists).
+  int number_of_types = args.Length() - utility_arguments_number;
 
   ProbeArgumentsTypeInfo payload_type;
 
-  if (numtypes > 0) {
-    for (int i = 0; i < numtypes; i++) {
-      if (!args[i + utility_arguments_number]->IsString()) {
-        throw eError("Data types arguments must be strings");
-      }
+  if(number_of_types <= 0) {
+    throw eError("The probe must have at least one type argument");
+  }
 
-      String::AsciiValue string_type(args[i + utility_arguments_number]->ToString());
-      EventPayloadType type = m_payload_map.ExtractPayloadType((char*)*string_type);
-
-      if (type == EDT_UNKNOWN) {
-        throw eError("Data types argument must be of a recognized type");
-      }
-      payload_type.AddType(type);
+  //Recognize the types.
+  for (int i = 0; i < number_of_types; i++) {
+    if (!args[i + utility_arguments_number]->IsString()) {
+      throw eError("Data types arguments must be strings");
     }
+
+    String::AsciiValue string_type(args[i + utility_arguments_number]->ToString());
+    EventPayloadType type = m_payload_map.ExtractPayloadType((char*)*string_type);
+
+    if (type == EDT_UNKNOWN) {
+      throw eError("Data types argument must be of a recognized type");
+    }
+    payload_type.AddType(type);
   }
 
   String::AsciiValue str(args[0]->ToString());
@@ -324,9 +326,6 @@ void V8TemplateHolder::InitProvider(Handle<Object> target) {
   ExposeMethod(t, ENABLE_FUNCTION_NAME, GET_V8_CALLBACK(V8Provider, Enable));
   ExposeMethod(t, DISABLE_FUNCTION_NAME, GET_V8_CALLBACK(V8Provider, Disable));
   ExposeMethod(t, FIRE_FUNCTION_NAME, GET_V8_CALLBACK(V8Provider, Fire));
-
-  target->Set(String::New(PROVIDER_CREATOR_FUNCTION_NAME), FunctionTemplate::New(GET_V8_CALLBACK(V8TemplateHolder, NewProviderInstance))->GetFunction());
-  target->Set(String::New(GUID_FROM_NAMES_FUNCTION_NAME), FunctionTemplate::New(GET_V8_CALLBACK(V8TemplateHolder, GuidFromNames))->GetFunction());
 }
 
 void V8TemplateHolder::InitProbe(Handle<Object> target) {
@@ -338,6 +337,11 @@ void V8TemplateHolder::InitProbe(Handle<Object> target) {
 
   WrapInPersistent(m_probe_creator, t);
   ExposeMethod(t, FIRE_FUNCTION_NAME, GET_V8_CALLBACK(V8Probe, Fire));
+}
+
+void V8TemplateHolder::ExposeModuleInterface(Handle<Object> target) {
+  target->Set(String::New(PROVIDER_CREATOR_FUNCTION_NAME), FunctionTemplate::New(GET_V8_CALLBACK(V8TemplateHolder, NewProviderInstance))->GetFunction());
+  target->Set(String::New(GUID_FROM_NAMES_FUNCTION_NAME), FunctionTemplate::New(GET_V8_CALLBACK(V8TemplateHolder, GuidFromNames))->GetFunction());
 }
 
 Handle<Value> V8TemplateHolder::NewProviderInstance(const V8Arguments& args) {
@@ -391,13 +395,15 @@ Handle<Value> V8TemplateHolder::GuidFromNames(const V8Arguments& args) {
 }
 
 //////////////////////////////////////////////////////////////////////////
-// init method called when module loaded
-// Need to declare as a dll export
+//Init method called when the module is loaded.
+//Need to declare as a dll export.
 extern "C" {
   __declspec(dllexport)
     void init (Handle<Object> target) {
       V8TemplateHolder::InitProvider(target);
       V8TemplateHolder::InitProbe(target);
+      V8TemplateHolder::ExposeModuleInterface(target);
+      g_manifest_builder.SetAtExitHook();
   }
 
   NODE_MODULE(TraceProviderBindings, init);

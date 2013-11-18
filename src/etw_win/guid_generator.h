@@ -15,6 +15,9 @@ NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVE
 #pragma once
 #include <WinCrypt.h>
 #include <string>
+/*
+ * This class helps to generate the guid from the names.
+ */
 class GuidGenerator {
   HCRYPTPROV m_provider_handle;
   HCRYPTHASH m_hash_handle;

@@ -31,6 +31,8 @@ using namespace v8;
 class RealProvider;
 /*
 An intermediary class used to abstract from V8 API differences.
+It handles all V8-specific actions and calls the appropriate methods
+of the derived RealProvider to handle platform-specific actions.
 */
 class V8Provider: protected ObjectWrap {
   protected:
@@ -85,13 +87,13 @@ protected:
 };
 
 /*
-Represents one etw provider.
+Represents one ETW provider.
 The class handles all platform-specific actions 
 and is completely V8-agnostic.
 */
 class RealProvider: public V8Provider {
 public:
-  RealProvider(const GUID& guid, const std::string& name);
+  RealProvider(const GUID& guid);
   ~RealProvider();
 
   RealProbe* AddProbe(const char* event_name, EVENT_DESCRIPTOR* descriptor, ProbeArgumentsTypeInfo& datatypes);
@@ -99,7 +101,9 @@ public:
   void Enable();
   void Disable();
   void Fire(RealProbe* probe);
-
+  /*
+   * The callback is triggered by EtwDllManager whenever the state of the provider is changed.
+   */
   void OnEtwStatusChanged(bool is_enabled) {
     m_enabled_status = is_enabled;
   }
@@ -110,6 +114,10 @@ private:
   GUID m_guid;
 };
 
+/*
+ * This class stores templates for the creator functions.
+ * It is also used to expose API to JS.
+ */
 class V8TemplateHolder {
 public:
   static Persistent<FunctionTemplate> m_provider_creator;
@@ -132,4 +140,8 @@ public:
    * Prepares a template for the probe. This template is used when the provider creates a probe.
    */
   static void InitProbe(Handle<Object> target);
+  /*
+   * Exposes the methods the user can use from JS on the object returned by require().
+   */
+  static void ExposeModuleInterface(Handle<Object> target);
 };

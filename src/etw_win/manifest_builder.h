@@ -20,14 +20,12 @@ NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVE
 #include <xmllite.h>
 #include "v8_compatibility.h"
 
-//#define LOAD_LIBRARY_SEARCH_SYSTEM32 0x00000800
 #include <atlbase.h>
 
-//#pragma comment(lib, "Shlwapi.lib")
 #pragma comment(lib, "XmlLite.lib")
 
 /*
- * This class keeps information about providers and their probes.
+ * This class keeps information about providers and their probes which is used to generate the manifest.
  * It is completely independent of the V8 garbage collector and the lifetimes of the providers/probes registered.
  * It is expected to be a unique global object.
  */
@@ -49,7 +47,10 @@ class ManifestBuilder {
     std::list<ProbeInfo> m_associated_probes;
     ProviderInfo(const GUID& guid, const std::string& name): m_guid(guid), m_name(name) {}
   };
-  
+
+  /*
+   * Handles binary->text GUID conversion imposing RAII safety.
+   */
   class GuidConverter {
     UCHAR* guid_string;
     std::string converted_guid;
@@ -67,23 +68,26 @@ class ManifestBuilder {
 
   class XmlDocument;
 
+  /*
+   * Represents a node, linked with a specific XmlDocument.
+   * Stores information about its attributes and child nodes.
+   */
   class XmlNode {
   public:
     std::string m_name;
     std::list<std::pair<std::string, std::string>> m_attributes;
-    XmlNode* m_parent;
     XmlDocument* m_owner;
     std::list<std::unique_ptr<XmlNode>> m_children;
 
     XmlNode(XmlDocument* owner, const std::string& node_name): m_owner(owner), m_name(node_name) {}
-    void AddProperty(const std::string& key, const std::string& value) {
+    void SetAttribute(const std::string& key, const std::string& value) {
       m_attributes.push_back(std::pair<std::string, std::string> (key, value));
     }
 
     void AddString(const std::string& id, const std::string& value) {
       XmlNode* string = AddNewNode("string");
-      string->AddProperty("id", id);
-      string->AddProperty("value", value);
+      string->SetAttribute("id", id);
+      string->SetAttribute("value", value);
     }
 
     XmlNode* AddNewNode(const std::string& node_name) {
@@ -92,6 +96,10 @@ class ManifestBuilder {
     }
   };
 
+  /*
+   * Implements an xml file with nodes.
+   * The node data is stored in RAM and is actually written when the Generate() function is called.
+   */
   class XmlDocument {
     CComPtr<IXmlWriter> m_xml_writer;
     CComPtr<IStream> m_output_stream;
@@ -118,7 +126,18 @@ class ManifestBuilder {
       }
     }
 
-    void StartDocument() {
+    void WriteAllAttributes(XmlNode* node) {
+      for(auto attribute : node->m_attributes) {
+        std::wstring wstr_key = MakeWString(attribute.first);
+        std::wstring wstr_val = MakeWString(attribute.second);
+        HRESULT result = m_xml_writer->WriteAttributeString(0, wstr_key.c_str(), 0, wstr_val.c_str());
+        if(S_OK != result) {
+          throw eError(MakeErrorStringFromCode("WriteAttributeString", result));
+        }
+      }
+    }
+
+    void WriteStartDocument() {
       HRESULT result;
       result = SHCreateStreamOnFile(m_manifest_filename.c_str(), STGM_CREATE | STGM_WRITE | STGM_SHARE_DENY_WRITE, &m_output_stream);
       if(S_OK != result) {
@@ -134,21 +153,21 @@ class ManifestBuilder {
       }
     }
 
-    void EndDocument() {
+    void WriteEndDocument() {
       HRESULT result = m_xml_writer->WriteEndDocument();
       if(S_OK != result) {
         throw eError(MakeErrorStringFromCode("WriteEndDocument", result));
       }
     }
 
-    void OpenNode(const std::string& name) {
+    void WriteStartNode(XmlNode* node) {
       wchar_t* nspace = nullptr;
 
       if(m_is_first) {
         nspace = L"http://schemas.microsoft.com/win/2004/08/events";      
       }
 
-      HRESULT result = m_xml_writer->WriteStartElement(0, MakeWString(name).c_str(), nspace);
+      HRESULT result = m_xml_writer->WriteStartElement(0, MakeWString(node->m_name).c_str(), nspace);
       if(S_OK != result) {
         throw eError(MakeErrorStringFromCode("WriteStartElement", result));
       }
@@ -163,7 +182,7 @@ class ManifestBuilder {
       }
     }
 
-    void CloseNode() {
+    void WriteEndNode() {
       HRESULT result = m_xml_writer->WriteEndElement();
       if(S_OK != result) {
         throw eError(MakeErrorStringFromCode("WriteEndElement", result));
@@ -171,21 +190,12 @@ class ManifestBuilder {
     }
 
     void WriteNode(XmlNode* node) {
-      OpenNode(node->m_name);
-      //Write all attributes.
-      for(auto attribute : node->m_attributes) {
-        std::wstring wstr_key = MakeWString(attribute.first);
-        std::wstring wstr_val = MakeWString(attribute.second);
-        HRESULT result = m_xml_writer->WriteAttributeString(0, wstr_key.c_str(), 0, wstr_val.c_str());
-        if(S_OK != result) {
-          throw eError(MakeErrorStringFromCode("WriteAttributeString", result));
-        }
-      }
-      node->m_children.begin();
+      WriteStartNode(node);
+      WriteAllAttributes(node);
       for(auto iter = node->m_children.begin(); iter != node->m_children.end(); ++iter) {
         WriteNode((*iter).get());
       }
-      CloseNode();
+      WriteEndNode();
     }
 
   public:
@@ -194,11 +204,13 @@ class ManifestBuilder {
     XmlNode* GetRootNode() {
       return m_root_node.get();
     }
-
+    /*
+     * Writes the data into a file.
+     */
     void Generate() {
-      StartDocument();
+      WriteStartDocument();
       WriteNode(m_root_node.get());
-      EndDocument();
+      WriteEndDocument();
     }
   };
 
@@ -232,14 +244,13 @@ public:
     }
   }
 
-  ~ManifestBuilder() {
-    m_instance->OnProcessExit();   
-  }
-
   class eRecordExists {};
 
   void MakeProviderRecord(const GUID& guid, const std::string& name="");
   void MakeProbeRecord(const GUID&, const std::string&, int, const ProbeArgumentsTypeInfo&);
+  void SetAtExitHook() {
+    atexit(OnProcessExit);
+  }
 };
 
 extern ManifestBuilder g_manifest_builder;

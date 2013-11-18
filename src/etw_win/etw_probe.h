@@ -30,7 +30,10 @@ public:
   static Handle<Value> New(V8Probe* probe);
 
   DEFINE_V8_CALLBACK(Fire)
-
+  /*
+   * This function extracts the data fired from JS and converts it into
+   * the representation WinAPI expects.
+   */
   void FillArguments(const Local<Array>& input);
 
   class eEmptyArrayPassed {};
@@ -49,7 +52,6 @@ private:
   }
 
   virtual void HandleArgumentValues(IArgumentValue* argument, unsigned int index) = 0;
-
 protected:
   void AllocateArguments();
 
@@ -60,7 +62,7 @@ protected:
 class RealProvider;
 
 /*
-EtwEvent class represents a single event/probe that was added.
+RealProbe class represents a single event/probe that was added.
 It knows about the arguments the probe has and contains a storage for their values.
 The storage is allocated only once and remains in this state until the probe is destroyed.
 */
@@ -76,12 +78,18 @@ public:
   void Unbind();
 
 private:
+  /*
+   * Based on the type information from AddProbe, the function allocates
+   * memory is used to store values when the probe is fire()d.
+   */
   void AllocateArguments() {
     int arg_number = m_type_info.GetArgsNumber();
     m_payload_descriptors.reset(new EVENT_DATA_DESCRIPTOR[arg_number]);
     V8Probe::AllocateArguments();
   }
-
+  /*
+   * Stores the data so it could be used when writing events.
+   */
   void HandleArgumentValues(IArgumentValue* argument, unsigned int index) {
     EVENT_DATA_DESCRIPTOR* descriptor = m_payload_descriptors.get() + index;
     EventDataDescCreate(descriptor, argument->GetValue(), argument->GetSize());
@@ -92,7 +100,9 @@ private:
   std::string m_event_name;
   RealProvider* m_owner;
 };
-
+/*
+ * Handles JSON serialization.
+ */
 class JSONHandler {
   Persistent<Object> m_json_holder;
   Persistent<Function> m_stringify_holder;

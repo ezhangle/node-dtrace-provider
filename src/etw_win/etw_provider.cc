@@ -20,7 +20,7 @@ NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVE
 
 EtwDllManager g_dll_manager;
 
-RealProvider::RealProvider(const GUID& guid, const std::string& name = ""): m_enabled_status(false), m_max_event_id(1) {
+RealProvider::RealProvider(const GUID& guid): m_enabled_status(false), m_max_event_id(1) {
   memcpy(&m_guid, &guid, sizeof(GUID));
 }
 
