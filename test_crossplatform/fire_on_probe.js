@@ -28,12 +28,9 @@ obj.bar = 'forty-two';
 
 probe1.fire(function () { return ['abc', 77]; });
 probe1.fire(function () { return ['MMMMMMMMM', 513]; });
-probe2.fire(function () { return ['MMMMMMMMM']; });
-//provider.removeProbe("event2");
 
-//try {
-//probe2.fire(function () { return ['MMMMMMMMM']; });
-//}catch(ex){}
+//provider.removeProbe("event2");
+probe2.fire(function () { return ['MMMMMMMMM']; });
 
 probe3.fire(function () { return [500, 999, 'xxxxxx yyyyyy']; });
 probe4.fire(function (p) { return [obj]; });

@@ -218,15 +218,7 @@ class ManifestBuilder {
   CComPtr<IXmlWriter> m_xml_writer;
   static ManifestBuilder* m_instance;
 
-  void CreateManifest();
-  static void OnProcessExit() {
-    try {
-      m_instance->CreateManifest();
-    } catch (const eError& ex) {
-      printf("Can't generate manifest: %s\n", ex.error_string.c_str());
-    }
-  }  
-
+  void UpdateManifestForProvider(const ProviderInfo& provider);
 public:
   ManifestBuilder() {
     if(m_instance) {
@@ -248,9 +240,6 @@ public:
 
   void MakeProviderRecord(const GUID& guid, const std::string& name="");
   void MakeProbeRecord(const GUID&, const std::string&, int, const ProbeArgumentsTypeInfo&);
-  void SetAtExitHook() {
-    atexit(OnProcessExit);
-  }
 };
 
 extern ManifestBuilder g_manifest_builder;

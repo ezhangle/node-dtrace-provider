@@ -62,14 +62,13 @@ exports.createTraceProvider = function (object) {
 	return new TraceProviderCreatorFunction(object);
 };
 
-//If we are not on win32, we must also expose the dtrace-only creator function to support existing code as well as namesFromGuid.
-if (platform != 'win32' && is_platform_supported) {
-	exports.createDTraceProvider = function (name, module) {
-		if (arguments.length == 2) {
-			return (new TraceProviderCreatorFunction(name, module)); 
-		}
-		else {
-			return (new TraceProviderCreatorFunction(name));
-		}
-	};
-}
+//We must also expose the dtrace-only creator function to support existing code.
+exports.createDTraceProvider = function (name, module) {
+	if (arguments.length == 2) {
+		return (new TraceProviderCreatorFunction(name, module)); 
+	}
+	else {
+		return (new TraceProviderCreatorFunction(name));
+	}
+};
+

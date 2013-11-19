@@ -26,80 +26,105 @@ GuidGenerator g_guid_generator;
 
 Handle<Value> V8Provider::New(const V8Arguments& args) {
   HandleScope scope;
-  if(args.Length() != 1) {
-    throw eError("The function takes only one argument");
+
+  bool has_object = false;
+  bool is_guid_generation_required = false;
+
+  if(!args[0]->IsString()) { //If the first argument is not a string.
+    if(args[0]->IsObject() && args.Length() == 1) { // Then it should be an object and only one.
+      has_object = true; //Indicate it..
+    } else { //..or generate an exception.
+      throw eError("Invalid type passed, one object is expected");
+    }
+  } else if(args.Length() > 2) { //If first argument is a string, make sure that there is only one additional string argument.
+    throw eError("The function can take only two string arguments");
   }
 
-  //The argument should be an object.
-  if(!args[0]->IsObject()) {
-    throw eError("Invalid type passed, an object is expected");
-  }
-
-  Local<String> guid_property_key = String::New(PROPERTY_GUID);
-  Local<String> provider_name_property_key = String::New(PROPERTY_PROVIDER_NAME);
-  Local<String> module_name_property_key = String::New(PROPERTY_MODULE_NAME);
-  Handle<String> property_value;
-
-  GUID provider_guid;
   std::string provider_name;
   std::string module_name;
+  GUID provider_guid;
 
-  Local<Object> argument = args[0]->ToObject();
+  if(has_object) { //If we have been given an object, handle it fields and extract the data.
+    Local<String> guid_property_key = String::New(PROPERTY_GUID);
+    Local<String> provider_name_property_key = String::New(PROPERTY_PROVIDER_NAME);
+    Local<String> module_name_property_key = String::New(PROPERTY_MODULE_NAME);
+    Handle<String> property_value;
 
-  bool has_guid = false;
-  bool has_name = false;
+    Local<Object> argument = args[0]->ToObject();
 
-  //Extract the GUID if we have it.
-  if(argument->Has(guid_property_key)) {
-    //If the property is not a string, throw an exception.
-    if(!argument->Get(guid_property_key)->IsString()) {
-      throw eError("Property value must be a string");
-    } else {
-      //Extract the string.
-      property_value = Handle<String>::Cast(argument->Get(guid_property_key));
-      String::AsciiValue string_guid(property_value);
+    bool has_guid = false;
+    bool has_name = false;
 
-      //And convert it into a GUID.
-      long rc = UuidFromString((unsigned char*)*string_guid, &provider_guid);
-      if (rc != RPC_S_OK) {
-        throw eError("Incorrect GUID format");
-      }
-      has_guid = true;
-    }
-  }
+    //Extract the GUID if we have it.
+    if(argument->Has(guid_property_key)) {
+      //If the property is not a string, throw an exception.
+      if(!argument->Get(guid_property_key)->IsString()) {
+        throw eError("Property value must be a string");
+      } else {
+        //Extract the string.
+        property_value = Handle<String>::Cast(argument->Get(guid_property_key));
+        String::AsciiValue string_guid(property_value);
 
-  //Now try to extract the names.
-  if(argument->Has(provider_name_property_key)) { 
-    if(!argument->Get(provider_name_property_key)->IsString()) { 
-      throw eError("Property value must be a string");
-    } else {
-      //Extract the provider name.
-      property_value = Handle<String>::Cast(argument->Get(provider_name_property_key));
-      String::AsciiValue provider(property_value);
-      provider_name = *provider;
-
-      //Check is the user passed the optional module name.
-      if(argument->Has(module_name_property_key)) {
-        if(!argument->Get(module_name_property_key)->IsString()) {
-          throw eError("Property value must be a string");
-        } else {
-          //Extract the module name string.
-          property_value = Handle<String>::Cast(argument->Get(module_name_property_key));
-          String::AsciiValue module(property_value);
-          module_name = *module;
+        //And convert it into a GUID.
+        long rc = UuidFromString((unsigned char*)*string_guid, &provider_guid);
+        if (rc != RPC_S_OK) {
+          throw eError("Incorrect GUID format");
         }
+        has_guid = true;
       }
-      has_name = true;
     }
+
+    //Now try to extract the names.
+    if(argument->Has(provider_name_property_key)) { 
+      if(!argument->Get(provider_name_property_key)->IsString()) { 
+        throw eError("Property value must be a string");
+      } else {
+        //Extract the provider name.
+        property_value = Handle<String>::Cast(argument->Get(provider_name_property_key));
+        String::AsciiValue provider(property_value);
+        provider_name = *provider;
+
+        //Check is the user passed the optional module name.
+        if(argument->Has(module_name_property_key)) {
+          if(!argument->Get(module_name_property_key)->IsString()) {
+            throw eError("Property value must be a string");
+          } else {
+            //Extract the module name string.
+            property_value = Handle<String>::Cast(argument->Get(module_name_property_key));
+            String::AsciiValue module(property_value);
+            module_name = *module;
+          }
+        }
+        has_name = true;
+      }
+    }
+
+    //If we have no GUID and no names, it is an error.
+    if(!has_guid) { 
+      if(!has_name) {
+        throw eError("Specify name(s) or a GUID to create a provider");
+      } else { //If we have no GUID, but have the names (or at lease one) - indicate that we can and need generate the guid.
+        is_guid_generation_required = true;
+      }      
+    }
+
+  } else { //If we have been given the string names...
+    String::AsciiValue provider(args[0]->ToString()); //Get the provider name first.
+    provider_name = *provider;
+
+    //Check if the module name exists and it is valid.
+    if (args.Length() == 2) {
+      if (!args[1]->IsString()) {
+        throw eError("Argument 2 is expected to be a string");
+      } else { //If it is, extract it.
+        String::AsciiValue module(args[1]->ToString());
+        module_name = *module;
+      }
+    }
+    is_guid_generation_required = true;
   }
 
-  //If we have no GUID and no names, it is an error.
-  if(!has_guid && !has_name) { 
-    throw eError("Specify name(s) or a GUID to create a provider");
-  }
-
-  //If we have no GUID, but have the names (or at lease one) - pass them to the generation routine and get the result.
-  if(!has_guid) { 
+  if(is_guid_generation_required) {
     std::pair<GUID, std::string> result = g_guid_generator.GenerateGuidFromNames(provider_name, module_name);
     provider_guid = result.first;
   }
@@ -347,11 +372,15 @@ void V8TemplateHolder::ExposeModuleInterface(Handle<Object> target) {
 Handle<Value> V8TemplateHolder::NewProviderInstance(const V8Arguments& args) {
   HandleScope scope;
 
-  const unsigned argc = 1;
-  Handle<Value> argv[argc] = { args[0] };
-  
+  const int argc = args.Length();
+
+  std::vector<Handle<Value>> argv(argc);
+  for(int i = 0; i < args.Length(); i++) {
+    argv[i] = args[i];
+  }
+
   Local<v8::FunctionTemplate> pers_obj = ExtractFromPersistent(m_provider_creator);
-  Local<Object> instance = pers_obj->GetFunction()->NewInstance(argc, argv);
+  Local<Object> instance = pers_obj->GetFunction()->NewInstance(argc, &argv[0]);
 
   return scope.Close(instance);
 }
@@ -403,7 +432,6 @@ extern "C" {
       V8TemplateHolder::InitProvider(target);
       V8TemplateHolder::InitProbe(target);
       V8TemplateHolder::ExposeModuleInterface(target);
-      g_manifest_builder.SetAtExitHook();
   }
 
   NODE_MODULE(TraceProviderBindings, init);

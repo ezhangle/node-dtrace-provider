@@ -40,7 +40,7 @@ The Windows implementation supports Node.js 0.11 as well as previous releases.
 To build the addon for a release version below 0.11, uncomment
 
     #define BUILD_PRE011_COMPATIBILITY
-	
+
 in 
 
     src/etw_win/v8_compatibility.h
@@ -64,7 +64,7 @@ The createDTraceProvider function takes the name of the provider as the
 first argument; the second argument is an optional module name. Both 
 arguments are strings. This is a compatibility function left to allow
 the existing node apps using this extension to be able to work without
-modifying their code: this function is not exposed under Windows.
+modifying their code on all supported platforms.
 
 *Option 2 (cross-platform way):*
 
@@ -84,7 +84,7 @@ can provide the neccessary information to control the session.
 
 See the following files for sample code.
 
-    test_etw/guid_from_names_test.js
+    test_crossplatform/guid_from_names.js
     test_dtrace/names_from_guid.js
 ## EXAMPLE
 
@@ -113,7 +113,7 @@ or via the probe objects themselves:
     p2.fire(function(p) {
       return ["hello, dtrace via probe", "foo"];
     });
-	
+
 The example above creates a provider called "nodeapp", and adds two
 probes. It then enables the provider, at which point the provider
 becomes visible to DTrace.
@@ -162,7 +162,7 @@ D subroutine, but is available whether or not the platform supports it.
     dtrace: description 'nodeapp$target:::j1' matched 0 probes
     CPU     ID                    FUNCTION:NAME
       0  68712                            j1:j1   bar
-	  
+  
 
 ## ETW INFORMATION
 
@@ -174,10 +174,54 @@ fired, the session must be stopped. Starting/stopping the session
 requires the administrator privileges.
 
 To start tracing
+
     logman start mytrace -p {GUID} -o mytrace.etl -ets
 
 To stop tracing
+
     logman stop mytrace -ets
+
+
+The guid may not always be known. In this case, the guidFromNames
+function must be used. The following example demonstrates it.
+
+There is an application where the provider has been created 
+without specifying the GUID:
+
+    var extension = require('dtrace-provider');
+    var provider = extension.createTraceProvider({provider_name: 'nodeapp'});
+    //var provider = extension.createDTraceProvider('nodeapp'); //An alternative way to create the provider.
+
+We need to call guidFromNames before running this application.
+The code snippet below demonstates how it can be done:	
+	
+    var extension = require('dtrace-provider');
+    var generated_guid = extension.guidFromNames('nodeapp');
+    console.log('generated guid = ' + generated_guid);
+
+This code will print the GUID generated from the specified name.
+The output will look like:
+
+    generated guid = FAC03859-DB22-3EC7-B1B5-4E6E99A4B546
+
+Then the session can be started with
+
+    logman start mytrace -p {FAC03859-DB22-3EC7-B1B5-4E6E99A4B546} -o mytrace.etl -ets
+
+After the session has been started, the original application
+can be executed and all the probes fired will be recorded by ETW.
+
+The guidFromNames also allows the optional module name to be passed
+as well. For example: 
+
+    var extension = require('dtrace-provider');
+    var generated_guid = extension.guidFromNames('nodeapp', 'my_module');
+    var provider = extension.createTraceProvider({provider_name: 'nodeapp', module_name: 'my_module'});
+    //var provider = extension.createDTraceProvider('nodeapp', 'my_module'); //An alternative way to create the provider.
+
+This works for as long as there is a one-to-one match for the names.
+It is guaranteed that the GUID will always be same for same strings, i.e.
+the generation algorithm is deterministic.
 
 **Consuming events**
 
@@ -186,21 +230,33 @@ converted to a human-readable XML with tracerpt. The output will
 contain the information about the probes and raw binary data.
 
 To convert trace output to xml file (data will show names and values)
+
     tracerpt mytrace.etl
 
 To convert trace output to csv file (data will show names and values)
+
     tracerpt mytrace.etl -of CSV
-	
+
 The other way of consuming events is using tools that allow a manifest
 file to be supplied. The manifest contains information about the data
 types of the probes added and allows the raw binary data to be parsed
-correctly. The manifest is generated right before the termination of
-the node process.
+correctly. The manifest is updated in runtime whenever a new probe is
+created with the addProbe function and it remains valid after each update.
+
+The manifest file is unique for each provider. It is created in the
+process working directory with the name according to the pattern:
+
+    provider_GUID.man
 
 Some of these tools:
 
-     PerfView - http://www.microsoft.com/en-us/download/details.aspx?id=28567
-     LinqPad with Tx - http://tx.codeplex.com
+    PerfView - http://www.microsoft.com/en-us/download/details.aspx?id=28567
+    LinqPad with Tx - http://tx.codeplex.com
+
+For the example script the PerfView output will look like:
+
+    ThreadID="6,772" FormattedMessage="Node.js probe" Argument1="1" Argument2="2"
+    ThreadID="6,772" FormattedMessage="Node.js probe" Argument1="hello, dtrace via provider" 
 
 **Windows-only features**
 
@@ -217,7 +273,7 @@ about the ETW descriptor for the events (probes).
     var provider = extension.createTraceProvider({provider_name: 'my_provider', module_name: 'my_module', guid: '5A391F32-A079-42E1-97B1-8A45295AA1FD'});
     var desc = [10, 0, 0, 0, 0, 0, 0];
     var probe = provider.addProbe('event1', desc1, 'char *', 'int16');
-    
+
 The array matches the EVENT_DESCRIPTOR structure.
 
     http://msdn.microsoft.com/en-us/library/windows/desktop/aa363754%28v=vs.85%29.aspx
@@ -225,20 +281,26 @@ The array matches the EVENT_DESCRIPTOR structure.
 When the probes are created without the descriptor array, the event id
 is incremented for each new probe; the other fields are zero-initialized.
 
-None of these features will be recognized by the addon on non-win platforms.
+The descriptor array will be ignored on all of the supported platforms, 
+except Windows. Passing the types supported only under Windows 
+on the other platforms will result in their fallback to the dtrace types. 
+For example,  "uint16" will be handled as "int" and "wchar_t *" will be 
+handled as "char *".
 
 ## PLATFORM SUPPORT
 
 This libusdt-based Node.JS module supports 64 and 32 bit processes on
-Mac OS X and Solaris-like systems such as Illumos or SmartOS. Win 32/64 
-doesn't use libusdt and relies directly on WinAPI. As more platform support 
-is added to libusdt, those platforms will be supported by libusdt. 
-See libusdt's status at:
+Mac OS X and Solaris-like systems such as Illumos or SmartOS. As more
+platform support is added to libusdt, those platforms will be
+supported by this module. See libusdt's status at:
 
-  https://github.com/chrisa/libusdt#readme
+    https://github.com/chrisa/libusdt#readme
 
 FreeBSD is supported in principle but is restricted to only 4 working
 arguments per probe.
+
+The Win 32/64 implementation doesn't use libusdt and relies directly 
+on WinAPI.
 
 Platforms not supporting DTrace (notably, Linux) may
 install this module without building libusdt, with a stub no-op
@@ -261,15 +323,15 @@ unless probes are placed in particularly hot code paths.
 
 The source is available at:
 
-  https://github.com/chrisa/node-dtrace-provider.
+    https://github.com/chrisa/node-dtrace-provider.
 
 For issues, please use the Github issue tracker linked to the
 repository. Github pull requests are very welcome. 
 
 ## RUNNING THE TESTS
 
-     $ npm install
-     $ sudo ./node_modules/.bin/tap --tap test_dtrace/*.test.js
+    $ npm install
+    $ sudo ./node_modules/.bin/tap --tap test_dtrace/*.test.js
 
 ## OTHER IMPLEMENTATIONS
 

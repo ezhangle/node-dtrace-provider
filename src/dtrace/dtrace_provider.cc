@@ -211,16 +211,33 @@ namespace node {
     DTraceProbe *probe = ObjectWrap::Unwrap<DTraceProbe>(pd->ToObject());
     obj->Set(args[0]->ToString(), pd);
 
+    int index_offset = 1;
+
+    //If we have received a descriptor array for ETW - ignore it and adjust the index.
+    if(args.Length() >= 2 && args[1]->IsArray()) {
+      index_offset = 2;
+    }
+
     // add probe to provider
     for (int i = 0; i < USDT_ARG_MAX; i++) {
-      if (i < args.Length() - 1) {
-        String::AsciiValue type(args[i + 1]->ToString());
+      if (i < args.Length() - index_offset) {
+        String::AsciiValue type(args[i + index_offset]->ToString());
 
         if (strncmp("json", *type, 4) == 0)
           probe->arguments[i] = new DTraceJsonArgument();
-        else if (strncmp("char *", *type, 6) == 0)
+        else if (strncmp("char *", *type, 6) == 0 || 
+                 strncmp("wchar_t *", *type, 9) == 0)
           probe->arguments[i] = new DTraceStringArgument();
-        else if (strncmp("int", *type, 3) == 0)
+        else if (strncmp("int", *type, 3) == 0 || 
+                 strncmp("int8", *type, 4) == 0 ||
+                 strncmp("int16", *type, 5) == 0 ||
+                 strncmp("int32", *type, 5) == 0 ||
+                 strncmp("int64", *type, 5) == 0 ||
+                 strncmp("uint", *type, 4) == 0 ||
+                 strncmp("uint8", *type, 5) == 0 ||
+                 strncmp("uint16", *type, 6) == 0 ||
+                 strncmp("uint32", *type, 6) == 0 ||
+                 strncmp("uint64", *type, 6) == 0)
           probe->arguments[i] = new DTraceIntegerArgument();
         else
           probe->arguments[i] = new DTraceStringArgument();
