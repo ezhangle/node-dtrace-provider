@@ -34,6 +34,7 @@ It must be set before invoking npm install or creating a project.
 Creating the Visual Studio project files is done using node-gyp. This is a 
 node add-on for creating the appropriate builds for your installation.
 To create a Visual Studio solution:
+
     node-gyp configure
 
 The Windows implementation supports Node.js 0.11 as well as previous releases.
@@ -54,8 +55,9 @@ the provider and the module to create the provider, while Windows requires
 a GUID which is also used to control the tracing session.
 
 To handle this difference, there are two ways to create the provider.
+Both options can be used for all of the supported platforms.
 
-*Option 1 (DTrace-only way):*
+*Option 1 (compatibility way):*
 
     var d = require('dtrace-provider');
     var dtp = d.createDTraceProvider("provider", "module");
@@ -64,7 +66,7 @@ The createDTraceProvider function takes the name of the provider as the
 first argument; the second argument is an optional module name. Both 
 arguments are strings. This is a compatibility function left to allow
 the existing node apps using this extension to be able to work without
-modifying their code on all supported platforms.
+modifying their code.
 
 *Option 2 (cross-platform way):*
 
@@ -72,20 +74,21 @@ modifying their code on all supported platforms.
     var provider = d.createTraceProvider({provider_name: 'provider', module_name: 'module', guid: '5A391F32-A079-42E1-97B1-8A45295AA1FD'});
 
 The createTraceProvider function takes an object with the above-written 
-properties. This way can be used on all supported platforms. The user
-can be specific about what information they want to supply to the
-function. In the situation when the information required by the platform
-has not been passed in, it will be generated from what has been given.
+properties. The user can be specific about what information they want to 
+supply to the function. In the situation when the information required 
+by the platform has not been passed in, it will be generated from what 
+has been given.
 
 That is why the extension also exposes two helper functions: guidFromNames
 and namesFromGuid exposed on Windows and the other platforms respectively. These
 functions use the same algorithms that are used by createTraceProvider and
 can provide the neccessary information to control the session.
 
-See the following files for sample code.
+See the following files for the sample code.
 
     test_crossplatform/guid_from_names.js
     test_dtrace/names_from_guid.js
+
 ## EXAMPLE
 
 Here's a simple example of creating a provider:
@@ -122,8 +125,8 @@ The probes are then fired.
 
 ## GENERAL INFORMATION
 
-Available on all supported platforms argument types are "int", for integer 
-numeric values, "char *" for strings, and "json" for objects rendered into 
+Available on all of the supported platforms argument types are "int", for 
+integer numeric values, "char *" for strings, and "json" for objects rendered into 
 JSON strings. Arguments typed as "json" will be created as "char *" probes in
 the provider, but objects passed to these probe arguments will be automatically 
 serialized to JSON before being passed forward to the system API.
@@ -211,7 +214,7 @@ Then the session can be started with
 After the session has been started, the original application
 can be executed and all the probes fired will be recorded by ETW.
 
-The guidFromNames also allows the optional module name to be passed
+The guidFromNames function allows the optional module name to be passed
 as well. For example: 
 
     var extension = require('dtrace-provider');
@@ -243,11 +246,6 @@ types of the probes added and allows the raw binary data to be parsed
 correctly. The manifest is updated in runtime whenever a new probe is
 created with the addProbe function and it remains valid after each update.
 
-The manifest file is unique for each provider. It is created in the
-process working directory with the name according to the pattern:
-
-    provider_GUID.man
-
 Some of these tools:
 
     PerfView - http://www.microsoft.com/en-us/download/details.aspx?id=28567
@@ -257,6 +255,16 @@ For the example script the PerfView output will look like:
 
     ThreadID="6,772" FormattedMessage="Node.js probe" Argument1="1" Argument2="2"
     ThreadID="6,772" FormattedMessage="Node.js probe" Argument1="hello, dtrace via provider" 
+
+    
+The manifest file is unique for each provider. It is created in the
+process working directory with its name given according to the pattern:
+
+    provider_GUID.man
+
+For the 'nodeapp' provider name it will look like:
+
+    provider_FAC03859-DB22-3EC7-B1B5-4E6E99A4B546.man
 
 **Windows-only features**
 
