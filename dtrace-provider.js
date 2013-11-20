@@ -15,6 +15,9 @@ TraceProviderStub.prototype.removeProbe = function () { };
 TraceProviderStub.prototype.enable = function () { };
 TraceProviderStub.prototype.disable = function () { };
 TraceProviderStub.prototype.fire = function () { };
+NamesFromGuidFunction = function () { return ['not implemented on this platform', 'not implemented on this platform'] };
+GuidFromNamesFunction = function () { return 'not implemented on this platform' };
+TraceProviderCreatorFunction = TraceProviderStub;
 
 if (process.platform == 'darwin' ||
 	process.platform == 'solaris' ||
@@ -46,13 +49,6 @@ for (var i in builds) {
 		}
 	}
 }
-
-if (!TraceProviderCreatorFunction) {
-	console.log('Dtrace provider: using stub functions');
-	TraceProviderCreatorFunction = TraceProviderStub;
-	NamesFromGuidFunction = function () { };
-	GuidFromNamesFunction = function () { };
-} 
 
 //Expose the universal function for provider creation.
 exports.TraceProvider = TraceProviderCreatorFunction;

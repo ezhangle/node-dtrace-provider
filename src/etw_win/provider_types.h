@@ -80,9 +80,10 @@ It is type-agnostic and can be used for any argument types.
 */
 class IArgumentValue {
 public:
-  virtual ULONG GetSize()=0;
-  virtual void* GetValue()=0;
-  virtual void SetValue(const void*)=0;
+  virtual ULONG GetSize() = 0;
+  virtual void* GetValue() = 0;
+  virtual void SetValue(const void*) = 0;
+  virtual void SetDefaultValue() = 0;
   virtual ~IArgumentValue() {}
 };
 
@@ -92,12 +93,14 @@ If a type requires any special handling, template specification must be used.
 */
 template <typename T> class ArgumentValue: public IArgumentValue {
   T m_value;
+  bool m_is_dirty;
 public:
-  ArgumentValue(const T& value = T()) { //m_value will be value-initialized by default.
+  ArgumentValue(const T& value = T()): m_is_dirty(false) { //m_value will be value-initialized by default.
     m_value = value;
   }
   ~ArgumentValue() {}
   void SetValue(const void* value);
+  void SetDefaultValue();
   void* GetValue();
   ULONG GetSize();
 };
@@ -132,17 +135,28 @@ inline ULONG ArgumentValue<std::wstring>::GetSize() {
   return (m_value.length() + 1) * sizeof(wchar_t);
 }
 
-template <class T>
+template <typename T>
 inline void ArgumentValue<T>::SetValue(const void* value) {
   m_value = *((T*)value);
+  m_is_dirty = true;
 }
 
 template <>
 inline void ArgumentValue<std::string>::SetValue(const void* value) {
   m_value = (char*)value;
+  m_is_dirty = true;
 }
 
 template <>
 inline void ArgumentValue<std::wstring>::SetValue(const void* value) {
   m_value = (wchar_t*)value;
+  m_is_dirty = true;
+}
+
+template <typename T>
+inline void ArgumentValue<T>::SetDefaultValue() {
+  if(m_is_dirty) {
+    m_value = T();
+    m_is_dirty = false;
+  } 
 }

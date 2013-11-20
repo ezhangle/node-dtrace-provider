@@ -64,9 +64,9 @@ Handle<Value> V8Probe::Fire(const V8Arguments& args) {
       std::stringstream formatter;
       formatter << "Invalid argument type passed in array index " << ex.m_failed_argument_number;
       throw eError(formatter.str());
-    } catch (const V8Probe::eArrayTooLarge&) {
+    } catch (const eArrayTooLarge&) {
       throw eError("The number of entries in the array returned exceeds the number of arguments the probe expects");
-    } catch (const V8Probe::eEmptyArrayPassed&) {
+    } catch (const eEmptyArrayPassed&) {
       return scope.Close(Undefined());
     }
 
@@ -82,6 +82,8 @@ Handle<Value> V8Probe::Fire(const V8Arguments& args) {
 
 void V8Probe::FillArguments(const Local<Array>& input) {
   uint32_t arguments_number = input->Length();
+  //Uncomment this code to generate an exception when the user fires an empty array or an array with more arguments than the probe expects.
+  /*
   if(!arguments_number) {
     throw eEmptyArrayPassed();
   }
@@ -89,14 +91,14 @@ void V8Probe::FillArguments(const Local<Array>& input) {
   if(arguments_number > m_type_info.GetArgsNumber()) {
     throw eArrayTooLarge();
   }
-
+  */
   int current_index = 0;
   const int last_argument_index = arguments_number - 1;
 
   m_type_info.DoForEach([&](EventPayloadType type) {
     IArgumentValue* arg_val = m_argument_values[current_index].get();
 
-    //If the user has passed more values in the array than the probe expects - do nothing, these values will be default-initialized.
+    //If the user has passed less values in the array than the probe expects - do nothing, these values will be default-initialized.
     if(current_index <= last_argument_index) { 
       Local<Value> argument_value = input->Get(current_index);
       bool is_type_check_passed = true;
@@ -158,6 +160,10 @@ void V8Probe::FillArguments(const Local<Array>& input) {
         default:
           break;
       }
+    } else {
+      //Normally we don't get here. This branch is executed when few or no values have been returned by fire().
+      //Updating the internal storage with default values is necessary to clean up the values stored from previous fires with the right number of values.
+      arg_val->SetDefaultValue();
     }
 
     HandleArgumentValues(arg_val, current_index);

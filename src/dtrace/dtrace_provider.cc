@@ -22,10 +22,16 @@ namespace node {
 
   bool DTraceProvider::GenerateNamesFromGuid(std::string guid, std::pair<std::string, std::string>& result) {
     //Remove the group separators.
-    std::remove(guid.begin(), guid.end(), '-');
+    while(true) {
+      std::string::iterator position = std::find(guid.begin(), guid.end(), '-');
+      if(position == guid.end()) {
+        break;
+      }
+      guid.erase(position);
+    }
 
-    //The fixed GUID string is expected to contain exactly 36 characters.
-    if(guid.length() != 36) {
+    //The fixed GUID string is expected to contain exactly 32 characters.
+    if(guid.length() != 32) {
       return false;
     }
 
@@ -33,8 +39,8 @@ namespace node {
     result = std::pair<std::string, std::string>("provider_", "module_");
 
     //Concat the prepared names and the GUID: the first half of the GUID goes for the provider name, the second half goes for the module name.
-    result.first += guid.substr(0, 18);
-    result.second += guid.substr(18, 18);
+    result.first += guid.substr(0, 16);
+    result.second += guid.substr(16, 16);
 
     return true;
   }
