@@ -32,10 +32,10 @@ class RealProvider;
 /*
 An intermediary class used to abstract from V8 API differences.
 It handles all V8-specific actions and calls the appropriate methods
-of the derived RealProvider to handle platform-specific actions.
+of the implementation to handle platform-specific actions.
 */
-class V8Provider: protected ObjectWrap {
-  protected:
+class V8Provider: public ExposableImplementation<RealProvider> {
+private:
   /*
   * PayloadMap converts string literals received as the first argument from the addProbe JS function to named constants.
   * This class is also needed to screen off all invalid (unsupported) argument types received from the addProbe function.
@@ -81,8 +81,7 @@ public:
   DEFINE_V8_CALLBACK(Disable)
   DEFINE_V8_CALLBACK(Fire)
 
-protected:
-  V8Provider() {}
+  V8Provider(RealProvider* implementation): ExposableImplementation(implementation) {}
   ~V8Provider() {}
 };
 
@@ -91,7 +90,7 @@ Represents one ETW provider.
 The class handles all platform-specific actions 
 and is completely V8-agnostic.
 */
-class RealProvider: public V8Provider {
+class RealProvider {
 public:
   RealProvider(const GUID& guid);
   ~RealProvider();

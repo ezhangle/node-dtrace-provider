@@ -135,10 +135,9 @@ Handle<Value> V8Provider::New(const V8Arguments& args) {
     throw eError("Provider with this GUID had already been created");
   }
 
-  RealProvider* provider = new RealProvider(provider_guid);
-
+  V8Provider* v8_provider = new V8Provider(new RealProvider(provider_guid));
   //And expose it to JavaScript.
-  provider->Wrap(args.This());
+  v8_provider->Wrap(args.This());
   return args.This();
 }
 
@@ -213,17 +212,18 @@ Handle<Value> V8Provider::AddProbe(const V8Arguments& args) {
   const char* probe_name = *str;
 
   Handle<Object> wrapped_provider = args.Holder();
-  RealProvider* provider = ObjectWrap::Unwrap<RealProvider>(wrapped_provider);
+  V8Provider* provider = ObjectWrap::Unwrap<V8Provider>(wrapped_provider);
 
-  V8Probe* probe;
+  std::unique_ptr<RealProbe> probe;
+  EVENT_DESCRIPTOR* p_descriptor = nullptr;
 
   if(is_descriptor_passed) {
-    probe = provider->AddProbe(probe_name, &descriptor, payload_type);
-  } else {
-    probe = provider->AddProbe(probe_name, nullptr, payload_type);
-  }
+    p_descriptor = &descriptor;
+  } 
 
-  Handle<Value> wrapped_probe = V8Probe::New(probe);
+  probe.reset(provider->GetImplementation()->AddProbe(probe_name, p_descriptor, payload_type));
+
+  Handle<Value> wrapped_probe = V8Probe::New(new V8Probe(probe.release(), payload_type));
 
   //Associate the probe with the provider using its name as the key.
   wrapped_provider->Set(args[0]->ToString(), wrapped_probe);
@@ -239,22 +239,22 @@ Handle<Value> V8Provider::RemoveProbe(const V8Arguments& args) {
   }
 
   Handle<Object> wrapped_provider = args.Holder();
-  RealProvider* provider = ObjectWrap::Unwrap<RealProvider>(wrapped_provider);
+  V8Provider* provider = ObjectWrap::Unwrap<V8Provider>(wrapped_provider);
 
   Handle<Object> wrapped_probe = Local<Object>::Cast(wrapped_provider->Get(args[0]));
-  RealProbe* probe = ObjectWrap::Unwrap<RealProbe>(wrapped_probe);
+  V8Probe* probe = ObjectWrap::Unwrap<V8Probe>(wrapped_probe);
 
-  provider->RemoveProbe(probe);
+  provider->GetImplementation()->RemoveProbe(probe->GetImplementation());
   wrapped_provider->Delete(args[0]->ToString());
 
   return scope.Close(Undefined());
 }
 
 Handle<Value> V8Provider::Enable(const V8Arguments& args) {
-  RealProvider* provider = ObjectWrap::Unwrap<RealProvider>(args.Holder());
+  V8Provider* provider = ObjectWrap::Unwrap<V8Provider>(args.Holder());
 
   try {
-    provider->Enable();
+    provider->GetImplementation()->Enable();
   } catch(const eError& ex) {
     throw(ex);
   }
@@ -263,8 +263,8 @@ Handle<Value> V8Provider::Enable(const V8Arguments& args) {
 }
 
 Handle<Value> V8Provider::Disable(const V8Arguments& args) {
-  RealProvider* provider = ObjectWrap::Unwrap<RealProvider>(args.Holder());
-  provider->Disable();
+  V8Provider* provider = ObjectWrap::Unwrap<V8Provider>(args.Holder());
+  provider->GetImplementation()->Disable();
   return Undefined();
 }
 
@@ -280,14 +280,14 @@ Handle<Value> V8Provider::Fire(const V8Arguments& args) {
   }
 
   Handle<Object> wrapped_provider = args.Holder();
-  RealProvider* provider = ObjectWrap::Unwrap<RealProvider>(wrapped_provider);
+  V8Provider* provider = ObjectWrap::Unwrap<V8Provider>(wrapped_provider);
 
   if(!wrapped_provider->Has(args[0]->ToString())) {
     throw eError("Probe does not exist");
   }
 
   Handle<Object> wrapped_probe = Local<Object>::Cast(wrapped_provider->Get(args[0]));
-  RealProbe* probe = ObjectWrap::Unwrap<RealProbe>(wrapped_probe);
+  V8Probe* probe = ObjectWrap::Unwrap<V8Probe>(wrapped_probe);
 
   if(!probe) {
     throw eError("Failed to unwrap the probe");
@@ -326,7 +326,7 @@ Handle<Value> V8Provider::Fire(const V8Arguments& args) {
   }
 
   try {
-    provider->Fire(probe);
+    provider->GetImplementation()->Fire(probe->GetImplementation());
   } catch (const eError& ex) {
     throw(ex);
   }

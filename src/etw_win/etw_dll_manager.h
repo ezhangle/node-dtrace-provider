@@ -18,8 +18,7 @@ NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVE
 /*
  * Handles all interactions with WinAPI.
  */
-class EtwDllManager
-{
+class EtwDllManager {
   typedef ULONG (NTAPI *EventRegisterFunc)(LPCGUID ProviderId, PENABLECALLBACK EnableCallback, PVOID CallbackContext, PREGHANDLE RegHandle);
   typedef ULONG (NTAPI *EventUnregisterFunc)(REGHANDLE RegHandle);
   typedef ULONG (NTAPI *EventWriteFunc)(REGHANDLE RegHandle, PCEVENT_DESCRIPTOR EventDescriptor, ULONG UserDataCount,PEVENT_DATA_DESCRIPTOR UserData);

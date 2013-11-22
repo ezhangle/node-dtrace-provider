@@ -47,17 +47,18 @@ RealProbe* RealProvider::AddProbe(const char* event_name, EVENT_DESCRIPTOR* desc
     throw eError("A probe with this name already exists");
   }
 
-  RealProbe* event;
+  std::unique_ptr<RealProbe> probe;
+
   if(descriptor) {
-    event = new RealProbe(event_name, descriptor, datatypes);
+    probe.reset(new RealProbe(event_name, descriptor, datatypes.GetArgsNumber()));
   } else {
-    event = new RealProbe(event_name, m_max_event_id, datatypes);   
+    probe.reset(new RealProbe(event_name, m_max_event_id, datatypes.GetArgsNumber()));   
     m_max_event_id++;
   }
 
-  event->Bind(this);
+  probe->Bind(this);
   
-  return event;
+  return probe.release();
 }
 
 bool RealProvider::RemoveProbe(RealProbe* probe) {
@@ -75,7 +76,6 @@ void RealProvider::Enable(void) {
 
 void RealProvider::Disable() {
   g_dll_manager.Disable(this);
-  return;
 }
 
 void RealProvider::Fire(RealProbe* probe) {
@@ -88,6 +88,4 @@ void RealProvider::Fire(RealProbe* probe) {
   } catch(const eError& ex) {
     throw(ex);
   }
-
-  return;
 }

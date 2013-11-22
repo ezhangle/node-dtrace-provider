@@ -25,8 +25,49 @@ using namespace v8;
 
 #define PROBE_CLASS_NAME "Probe"
 
-class V8Probe: protected ObjectWrap {
+/*
+ * Exposable implementation stores a pointer to the actual implementation for the V8 object.
+ * Aggregation ensures that the pointer to this implementation will always be valid
+ * even if V8 GC moves around the containing object in memory.
+ */
+template <typename T> 
+class ExposableImplementation: protected ObjectWrap {
+  std::unique_ptr<T> m_implementation;
 public:
+  ExposableImplementation(T* implementation): m_implementation(implementation) {}
+  T* GetImplementation() {
+    return m_implementation.get();
+  }
+};
+
+class RealProbe;
+
+class V8Probe: public ExposableImplementation<RealProbe> {
+public:
+  V8Probe(RealProbe* implementation, ProbeArgumentsTypeInfo& types): ExposableImplementation(implementation) {
+    m_type_info = std::move(types);
+
+    m_type_info.DoForEach([&](EventPayloadType type) {
+      IArgumentValue* argument_value = nullptr;
+      switch (type) {
+        case EDT_JSON:
+        case EDT_STRING: argument_value = new ArgumentValue<std::string>(); break;
+        case EDT_WSTRING: argument_value = new ArgumentValue<std::wstring>(); break;
+        case EDT_INT32: argument_value = new ArgumentValue<int32_t>(); break;
+        case EDT_INT8: argument_value = new ArgumentValue<int8_t>(); break;
+        case EDT_INT16: argument_value = new ArgumentValue<int16_t>(); break;						
+        case EDT_INT64: argument_value = new ArgumentValue<int64_t>(); break;			
+        case EDT_UINT32: argument_value = new ArgumentValue<uint32_t>(); break;	
+        case EDT_UINT8: argument_value = new ArgumentValue<uint8_t>(); break;	
+        case EDT_UINT16: argument_value = new ArgumentValue<uint16_t>(); break;	 
+        case EDT_UINT64: argument_value = new ArgumentValue<uint64_t>(); break;	
+        default: 
+          break;
+      }
+      m_argument_values.push_back(std::unique_ptr<IArgumentValue>(argument_value));
+    });
+  }
+
   static Handle<Value> New(V8Probe* probe);
 
   DEFINE_V8_CALLBACK(Fire)
@@ -51,10 +92,6 @@ private:
     argument->SetValue(&value);
   }
 
-  virtual void HandleArgumentValues(IArgumentValue* argument, unsigned int index) = 0;
-protected:
-  void AllocateArguments();
-
   ProbeArgumentsTypeInfo m_type_info;
   std::vector<std::unique_ptr<IArgumentValue>> m_argument_values;
 };
@@ -66,10 +103,10 @@ RealProbe class represents a single event/probe that was added.
 It knows about the arguments the probe has and contains a storage for their values.
 The storage is allocated only once and remains in this state until the probe is destroyed.
 */
-class RealProbe: public V8Probe {
+class RealProbe {
 public:
-  RealProbe(const char* event_name, EVENT_DESCRIPTOR* descriptor, ProbeArgumentsTypeInfo& types);
-  RealProbe(const char* event_name, int event_id, ProbeArgumentsTypeInfo& types);
+  RealProbe(const char* event_name, EVENT_DESCRIPTOR* descriptor, int arguments_number);
+  RealProbe(const char* event_name, int event_id, int arguments_number);
   ~RealProbe();
 
   void Fire();
@@ -77,29 +114,22 @@ public:
   void Bind(RealProvider* provider);
   void Unbind();
 
-private:
-  /*
-   * Based on the type information from AddProbe, the function allocates
-   * memory is used to store values when the probe is fire()d.
-   */
-  void AllocateArguments() {
-    int arg_number = m_type_info.GetArgsNumber();
-    m_payload_descriptors.reset(new EVENT_DATA_DESCRIPTOR[arg_number]);
-    V8Probe::AllocateArguments();
-  }
   /*
    * Stores the data so it could be used when writing events.
    */
-  void HandleArgumentValues(IArgumentValue* argument, unsigned int index) {
+  void SetArgumentValue(IArgumentValue* argument, unsigned int index) {
     EVENT_DATA_DESCRIPTOR* descriptor = m_payload_descriptors.get() + index;
     EventDataDescCreate(descriptor, argument->GetValue(), argument->GetSize());
   }
 
+private:
+  int m_arguments_number;
   EVENT_DESCRIPTOR m_event_descriptor;
   std::unique_ptr<EVENT_DATA_DESCRIPTOR[]> m_payload_descriptors;
   std::string m_event_name;
   RealProvider* m_owner;
 };
+
 /*
  * Handles JSON serialization.
  */

@@ -31,9 +31,9 @@ Handle<Value> V8Probe::New(V8Probe* probe) {
 Handle<Value> V8Probe::Fire(const V8Arguments& args) {
   HandleScope scope;
 
-  RealProbe* probe = ObjectWrap::Unwrap<RealProbe>(args.Holder());
+  V8Probe* probe = ObjectWrap::Unwrap<V8Probe>(args.Holder());
 
-  if(!probe->IsBound()) {
+  if(!probe->GetImplementation()->IsBound()) {
     throw eError("Calling fire on a removed probe");
   }
 
@@ -71,7 +71,7 @@ Handle<Value> V8Probe::Fire(const V8Arguments& args) {
     }
 
     try {
-      probe->Fire();
+      probe->GetImplementation()->Fire();
     } catch(const eError& ex) {
       throw(ex);
     }
@@ -166,50 +166,23 @@ void V8Probe::FillArguments(const Local<Array>& input) {
       arg_val->SetDefaultValue();
     }
 
-    HandleArgumentValues(arg_val, current_index);
+    GetImplementation()->SetArgumentValue(arg_val, current_index);
     current_index++;
   });
 
   m_type_info.SetFilledArgumentsNumber(current_index);
 }
 
-void V8Probe::AllocateArguments() {
-  m_type_info.DoForEach([&](EventPayloadType type) {
-    IArgumentValue* argument_value = nullptr;
-    switch (type) {
-      case EDT_JSON:
-      case EDT_STRING: argument_value = new ArgumentValue<std::string>(); break;
-      case EDT_WSTRING: argument_value = new ArgumentValue<std::wstring>(); break;
-      case EDT_INT32: argument_value = new ArgumentValue<int32_t>(); break;
-      case EDT_INT8: argument_value = new ArgumentValue<int8_t>(); break;
-      case EDT_INT16: argument_value = new ArgumentValue<int16_t>(); break;						
-      case EDT_INT64: argument_value = new ArgumentValue<int64_t>(); break;			
-      case EDT_UINT32: argument_value = new ArgumentValue<uint32_t>(); break;	
-      case EDT_UINT8: argument_value = new ArgumentValue<uint8_t>(); break;	
-      case EDT_UINT16: argument_value = new ArgumentValue<uint16_t>(); break;	 
-      case EDT_UINT64: argument_value = new ArgumentValue<uint64_t>(); break;	
-      default: 
-        break;
-    }
-    m_argument_values.push_back(std::unique_ptr<IArgumentValue>(argument_value));
-  });
-}
 
 //////////////////////////////////////////////////////////////////////////
 
-RealProbe::RealProbe(const char* event_name, EVENT_DESCRIPTOR* desc, ProbeArgumentsTypeInfo& types): m_owner(nullptr), m_event_name(event_name), m_payload_descriptors(nullptr) {
+RealProbe::RealProbe(const char* event_name, EVENT_DESCRIPTOR* desc, int arguments_number): m_owner(nullptr), m_event_name(event_name), m_payload_descriptors(new EVENT_DATA_DESCRIPTOR[arguments_number]), m_arguments_number(arguments_number) {
   memcpy(&m_event_descriptor, desc, sizeof(EVENT_DESCRIPTOR));
-
-  m_type_info = std::move(types);
-  AllocateArguments();
 }
 
-RealProbe::RealProbe(const char* event_name, int event_id, ProbeArgumentsTypeInfo& types): m_owner(nullptr), m_event_name(event_name), m_payload_descriptors(nullptr) {
+RealProbe::RealProbe(const char* event_name, int event_id, int arguments_number): m_owner(nullptr), m_event_name(event_name), m_payload_descriptors(new EVENT_DATA_DESCRIPTOR[arguments_number]), m_arguments_number(arguments_number) {
   ZeroMemory(&m_event_descriptor, sizeof(EVENT_DESCRIPTOR));
   m_event_descriptor.Id = event_id;
-
-  m_type_info = std::move(types);
-  AllocateArguments();
 }
 
 bool RealProbe::IsBound() const {
@@ -232,7 +205,7 @@ void RealProbe::Fire() {
   }
 
   try {
-    g_dll_manager.Write(m_owner, &m_event_descriptor, m_type_info.GetArgsNumber(), m_payload_descriptors.get());
+    g_dll_manager.Write(m_owner, &m_event_descriptor, m_arguments_number, m_payload_descriptors.get());
   } catch (const eError& ex) {
     throw(ex);
   }

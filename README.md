@@ -86,8 +86,8 @@ can provide the neccessary information to control the session.
 
 See the following files for the sample code.
 
-    test_crossplatform/guid_from_names.js
-    test_dtrace/names_from_guid.js
+    test_crossplatform/guid-from-names.js
+    test_dtrace/names-from-guid.js
 
 ## EXAMPLE
 
