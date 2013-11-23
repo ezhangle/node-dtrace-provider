@@ -189,23 +189,27 @@ bool RealProbe::IsBound() const {
   return m_owner ? true : false;
 }
 
-void RealProbe::Bind(RealProvider* provider) {
+void RealProbe::Bind(const std::shared_ptr<RealProvider>& provider) {
   m_owner = provider;
 }
 
 void RealProbe::Unbind() {
-  m_owner = nullptr;
+  m_owner.reset();
+}
+//The probe implementation is not shared. When the containing object is deleted it will 
+//trigger the RealProbe destructor which will allow the owning provider implementation to be deleted.
+//It is safe for as long as the containing object doesn't have any data required by the implementation.
+RealProbe::~RealProbe() {
+  Unbind();
 }
 
-RealProbe::~RealProbe() {}
-
 void RealProbe::Fire() {
-  if (!g_dll_manager.IsRegistered(m_owner)) {
+  if (!g_dll_manager.IsRegistered(m_owner.get())) {
     return;
   }
 
   try {
-    g_dll_manager.Write(m_owner, &m_event_descriptor, m_arguments_number, m_payload_descriptors.get());
+    g_dll_manager.Write(m_owner.get(), &m_event_descriptor, m_arguments_number, m_payload_descriptors.get());
   } catch (const eError& ex) {
     throw(ex);
   }

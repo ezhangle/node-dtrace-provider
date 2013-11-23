@@ -132,7 +132,7 @@ Handle<Value> V8Provider::New(const V8Arguments& args) {
   try {
     g_manifest_builder.MakeProviderRecord(provider_guid, provider_name);
   } catch (const ManifestBuilder::eRecordExists&) {
-    throw eError("Provider with this GUID had already been created");
+    throw eError("Provider with this GUID has already been created");
   }
 
   V8Provider* v8_provider = new V8Provider(new RealProvider(provider_guid));
@@ -222,6 +222,7 @@ Handle<Value> V8Provider::AddProbe(const V8Arguments& args) {
   } 
 
   probe.reset(provider->GetImplementation()->AddProbe(probe_name, p_descriptor, payload_type));
+  probe->Bind(provider->GetSharedImplementation());
 
   Handle<Value> wrapped_probe = V8Probe::New(new V8Probe(probe.release(), payload_type));
 

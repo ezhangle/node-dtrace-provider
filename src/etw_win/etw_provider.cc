@@ -55,8 +55,6 @@ RealProbe* RealProvider::AddProbe(const char* event_name, EVENT_DESCRIPTOR* desc
     probe.reset(new RealProbe(event_name, m_max_event_id, datatypes.GetArgsNumber()));   
     m_max_event_id++;
   }
-
-  probe->Bind(this);
   
   return probe.release();
 }

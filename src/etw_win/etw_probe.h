@@ -29,14 +29,20 @@ using namespace v8;
  * Exposable implementation stores a pointer to the actual implementation for the V8 object.
  * Aggregation ensures that the pointer to this implementation will always be valid
  * even if V8 GC moves around the containing object in memory.
+ * Wrapping the implementation in shared_ptr ensures that when the containing object (V8Provider) for the provider is deleted by the GC
+ * its implementation will live for as long as there are probes bound to this implementation.
+ * When these probes are deleted, the provider implementation will be deleted as well.
  */
 template <typename T> 
 class ExposableImplementation: protected ObjectWrap {
-  std::unique_ptr<T> m_implementation;
+  std::shared_ptr<T> m_implementation;
 public:
   ExposableImplementation(T* implementation): m_implementation(implementation) {}
   T* GetImplementation() {
     return m_implementation.get();
+  }
+  std::shared_ptr<T> GetSharedImplementation() {
+    return m_implementation;
   }
 };
 
@@ -111,7 +117,7 @@ public:
 
   void Fire();
   bool IsBound() const;
-  void Bind(RealProvider* provider);
+  void Bind(const std::shared_ptr<RealProvider>& provider);
   void Unbind();
 
   /*
@@ -127,7 +133,7 @@ private:
   EVENT_DESCRIPTOR m_event_descriptor;
   std::unique_ptr<EVENT_DATA_DESCRIPTOR[]> m_payload_descriptors;
   std::string m_event_name;
-  RealProvider* m_owner;
+  std::shared_ptr<RealProvider> m_owner;
 };
 
 /*
